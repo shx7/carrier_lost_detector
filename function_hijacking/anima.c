@@ -23,6 +23,8 @@ static unsigned char orig_netif_off_bytes[PATCH_BYTES_COUNT] = {0};
 
 static void hijacked_netif_carrier_on(struct net_device *dev) {
     printk(KERN_ALERT"[ANIMA]: hijacked\n");
+    printk(KERN_ALERT"[ANIMA]: dev name \"%s\"\n", dev->name);
+    printk(KERN_ALERT"[ANIMA]: dev state 0x%lx\n", dev->state);
 } 
 
 inline void read_original_bytes(unsigned char *func_ptr, unsigned char *buff) {
@@ -90,6 +92,7 @@ static int __init anima_init(void) {
 
     write_cr0 (read_cr0 () & (~ 0x10000));
     write_patch(NETIF_CARRIER_ON_ADDR);
+    write_patch(NETIF_CARRIER_OFF_ADDR);
     write_cr0 (read_cr0 () | 0x10000);
 
     printk(KERN_ALERT"[ANIMA]: in kernel, function hijacked.\n");
@@ -99,6 +102,7 @@ static int __init anima_init(void) {
 static void __exit anima_exit(void) {
     write_cr0 (read_cr0 () & (~ 0x10000));
     write_original_bytes(NETIF_CARRIER_ON_ADDR, orig_netif_on_bytes); 
+    write_original_bytes(NETIF_CARRIER_OFF_ADDR, orig_netif_on_bytes); 
     write_cr0 (read_cr0 () | 0x10000);
 
     printk(KERN_ALERT"[ANIMA]: leaving the kernel...\n");
