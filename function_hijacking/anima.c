@@ -22,10 +22,16 @@ static unsigned char orig_netif_on_bytes[PATCH_BYTES_COUNT] = {0};
 static unsigned char orig_netif_off_bytes[PATCH_BYTES_COUNT] = {0};
 
 static void hijacked_netif_carrier_on(struct net_device *dev) {
-    printk(KERN_ALERT"[ANIMA]: hijacked\n");
+    printk(KERN_ALERT"[ANIMA]: netif_carrier_on hijacked\n");
     printk(KERN_ALERT"[ANIMA]: dev name \"%s\"\n", dev->name);
     printk(KERN_ALERT"[ANIMA]: dev state 0x%lx\n", dev->state);
 } 
+
+static void hijacked_netif_carrier_off(struct net_device *dev) {
+    printk(KERN_ALERT"[ANIMA]: netif_carrier_off hijacked\n");
+    printk(KERN_ALERT"[ANIMA]: dev name \"%s\"\n", dev->name);
+    printk(KERN_ALERT"[ANIMA]: dev state 0x%lx\n", dev->state);
+}
 
 inline void read_original_bytes(unsigned char *func_ptr, unsigned char *buff) {
     int i;
@@ -69,15 +75,11 @@ inline void create_patch(unsigned long func_ptr, unsigned char *out_buf) {
 }
 
 static int __init anima_init(void) {
+#ifdef ANIMA_DEBUG
     int i = 0;
-    // Save original bytes
-    read_original_bytes(NETIF_CARRIER_ON_ADDR, orig_netif_on_bytes);
-    read_original_bytes(NETIF_CARRIER_OFF_ADDR, orig_netif_off_bytes);
-
     // Create patch buffers
     create_patch((unsigned long)(hijacked_netif_carrier_on), hijacking_bytes);
 
-#ifdef ANIMA_DEBUG
     printk(KERN_ALERT"Original bytes:\n");
     for (i = 0; i < PATCH_BYTES_COUNT; i++) {
         printk(KERN_ALERT"%x\t", *((unsigned char *)(NETIF_CARRIER_ON_ADDR + i)));
@@ -90,8 +92,15 @@ static int __init anima_init(void) {
     }
 #endif
 
+    // Save original bytes
+    read_original_bytes(NETIF_CARRIER_ON_ADDR, orig_netif_on_bytes);
+    read_original_bytes(NETIF_CARRIER_OFF_ADDR, orig_netif_off_bytes); 
+
     write_cr0 (read_cr0 () & (~ 0x10000));
-    write_patch(NETIF_CARRIER_ON_ADDR);
+    create_patch((unsigned long)(hijacked_netif_carrier_on), hijacking_bytes);
+    write_patch(NETIF_CARRIER_ON_ADDR); 
+
+    create_patch((unsigned long)(hijacked_netif_carrier_off), hijacking_bytes);
     write_patch(NETIF_CARRIER_OFF_ADDR);
     write_cr0 (read_cr0 () | 0x10000);
 
