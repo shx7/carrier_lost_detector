@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <linux/netdevice.h>
+#include <linux/types.h>
 #include <linux/kprobes.h>
 
 // Hardcoded addresses of netif function. See in /boot/System.map
@@ -25,12 +26,28 @@ static void hijacked_netif_carrier_on(struct net_device *dev) {
     printk(KERN_ALERT"[ANIMA]: netif_carrier_on hijacked\n");
     printk(KERN_ALERT"[ANIMA]: dev name \"%s\"\n", dev->name);
     printk(KERN_ALERT"[ANIMA]: dev state 0x%lx\n", dev->state);
+
+    /*if (test_and_clear_bit(__LINK_STATE_NOCARRIER, &dev->state)) {
+        if (dev->reg_state == NETREG_UNINITIALIZED)
+            return;
+        atomic_inc(&dev->carrier_changes);
+        linkwatch_fire_event(dev);
+        if (netif_running(dev))
+            __netdev_watchdog_up(dev);
+    }*/
 } 
 
-static void hijacked_netif_carrier_off(struct net_device *dev) {
+void hijacked_netif_carrier_off(struct net_device *dev) {
     printk(KERN_ALERT"[ANIMA]: netif_carrier_off hijacked\n");
     printk(KERN_ALERT"[ANIMA]: dev name \"%s\"\n", dev->name);
     printk(KERN_ALERT"[ANIMA]: dev state 0x%lx\n", dev->state);
+
+    /*if (!test_and_set_bit(__LINK_STATE_NOCARRIER, &dev->state)) {
+        if (dev->reg_state == NETREG_UNINITIALIZED)
+            return;
+    atomic_inc(&dev->carrier_changes);
+    linkwatch_fire_event(dev);
+    }*/
 }
 
 inline void read_original_bytes(unsigned char *func_ptr, unsigned char *buff) {
