@@ -33,14 +33,19 @@ struct net_device *p_dev = NULL;
 char   device_copied = 0;
 struct net_device dev;
 
+void anima_netdev_state_change(struct net_device *dev) {
+    call_netdevice_notifiers(NETDEV_CHANGE, dev);
+    rtmsg_ifinfo(RTM_NEWLINK, dev, 0);
+}
+
 void change_link_state_up(struct net_device *dev) { 
     dev->state = 7;
-    netdev_state_change(dev); 
+    anima_netdev_state_change(dev); 
 }
 
 void change_link_state_down(struct net_device *dev) { 
     dev->state = 3;
-    netdev_state_change(dev); 
+    anima_netdev_state_change(dev); 
 }
 
 int pre_handler(struct kprobe *p, struct pt_regs *regs) {
