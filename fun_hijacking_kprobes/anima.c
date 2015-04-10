@@ -18,6 +18,7 @@
 #define LINK_CHANGE_PROC_FILE  "hij_chg_linkg_state"
 #define NETIF_CARRIER_ON_ADDR  (unsigned char *)0xFFFFFFFF812A9093
 #define NETIF_CARRIER_OFF_ADDR (unsigned char *)0xFFFFFFFF812A8DCB
+#define MODULE_NAME            "link_chg_module"
 
 enum ModuleState {
     HIJACKING_PRESENT,
@@ -66,55 +67,81 @@ static struct kprobe kp_on = {
 
 static struct proc_dir_entry *proc_mode_file;
 static struct proc_dir_entry *proc_link_chg_file;
-int tmp = 0;
-static char msg[1024] = {0};
+static struct proc_dir_entry *proc_module_entry;
+#define MSG_LEN 1024
+static char msg[MSG_LEN] = {0};
 
-ssize_t procfile_write (struct file *f, const char __user *buffer, size_t len, loff_t *offset)
+static int proc_mode_read(char *page, char **start,
+    off_t off, int count,
+    int *eof, void *data)
 {
-    len = copy_from_user(msg, buffer, len);
-    if (msg[0] == '1') {
-        printk(KERN_ALERT"[ANIMA]: hijacking on");
-        hijacking_state = HIJACKING_PRESENT;
-    } 
+    int len;
 
-    if (msg[0] == '0') {
-        printk(KERN_ALERT"[ANIMA]: hijacking off");
-        hijacking_state = HIJACKING_OFF;
-    } 
-    return len;
-}
-
-ssize_t procfile_read (struct file *f, char __user *buffer, size_t len, loff_t *offset)
-{
     if (hijacking_state == HIJACKING_PRESENT) {
-        len = copy_to_user(buffer, "1", 1);
+        len = sprintf(page, "HIJACKING_PRESENT\n");
     } else {
-        len = copy_to_user(buffer, "0", 1);
-    }
+        len = sprintf(page, "HIJACKING_OFF\n");
+    } 
 
     return len;
 }
 
-ssize_t proc_link_chg_write (struct file *f, const char __user *buffer, size_t len, loff_t *offset) {
-    if (p_dev != NULL) {
-        change_link_state(p_dev);
-        printk("[ANIMA]: link state changed\n");
+static int proc_mode_write(struct file *file,
+    const char *buffer,
+    unsigned long count, 
+    void *data)
+{
+    int len;
+
+    if (count > MSG_LEN) {
+        len = MSG_LEN;
     } else {
-        printk("[ANIMA]: dev struct is null, no change\n");
+        len = count;
     }
+
+    if (copy_from_user(msg, buffer, len))
+        return -EFAULT;
+
+    if (strncmp(msg, "1", 1) == 0) {
+        printk(KERN_ALERT"[ANIMA]: hijacking mode changed to HIJACKING_PRESENT\n");
+        hijacking_mode = HIJACKING_PRESENT;
+    } else {
+        printk(KERN_ALERT"[ANIMA]: hijacking mode changed to HIJACKING_OFF\n");
+        hijacking_mode = HIJACKING_OFF;
+    } 
+
     return len;
-} 
+}
 
-static const struct file_operations proc_mode_file_ops = {
-    .read = procfile_read,
-    .write = procfile_write,
-    .owner = THIS_MODULE, 
-};
+static int proc_link_chg_write (struct file *file,
+    const char *buffer,
+    unsigned long count, 
+    void *data)
+{
+    int len;
 
-static const struct file_operations proc_link_chg_file_ops = {
-    .write = proc_link_chg_write,
-    .owner = THIS_MODULE, 
-};
+    if (count > MSG_LEN) {
+        len = MSG_LEN;
+    } else {
+        len = count;
+    }
+
+    if (copy_from_user(msg, buffer, len))
+        return -EFAULT;
+
+    if (strncmp(msg, "1", 1) == 0) {
+        if (p_dev != NULL) {
+            printk(KERN_ALERT"[ANIMA]: link state changed\n");
+            change_link_state(p_dev);
+        } else {
+            printk(KERN_ALERT"[ANIMA]: dev struct is null, no change\n");
+        }
+    } else {
+        printk(KERN_ALERT"[ANIMA]: no link state change\n");
+    } 
+
+    return len; 
+}
 
 static int __init anima_init(void) {
    printk(KERN_ALERT"[ANIMA]: in kernel\n"); 
@@ -133,20 +160,31 @@ static int __init anima_init(void) {
    }
 
    // Register proc entry
-   proc_mode_file = proc_create(MODE_PROC_FILE, 0, NULL, &proc_mode_file_ops);
+   proc_module_entry = proc_mkdir(MODULE_NAME, NULL);
+   if (proc_module_entry == NULL) { 
+       remove_proc_entry(MODULE_NAME, NULL);
+       printk(KERN_ALERT"[ANIMA]: can not create proc file:\"%s\"\n", MODULE_NAME);
+       return -1;
+   } 
+
+   proc_mode_file = create_proc_entry(MODE_PROC_FILE, 0444, proc_module_entry);
    if (proc_mode_file == NULL) {
-       remove_proc_entry(MODE_PROC_FILE, NULL);
+       remove_proc_entry(MODE_PROC_FILE, proc_module_entry);
        printk(KERN_ALERT"[ANIMA]: can not create proc file:\"%s\"\n", MODE_PROC_FILE);
        return -1;
+   } else {
+       proc_mode_file->read_proc = proc_mode_read;
+       proc_mode_file->write_proc = proc_mode_write;
    }
 
-   proc_link_chg_file = proc_create(LINK_CHANGE_PROC_FILE, 0, NULL, &proc_link_chg_file_ops);
+   proc_link_chg_file = create_proc_entry(LINK_CHANGE_PROC_FILE, 0444, proc_module_entry);
    if (proc_mode_file == NULL) {
-       remove_proc_entry(LINK_CHANGE_PROC_FILE, NULL);
+       remove_proc_entry(LINK_CHANGE_PROC_FILE, proc_module_entry);
        printk(KERN_ALERT"[ANIMA]: can not create proc file:\"%s\"\n", LINK_CHANGE_PROC_FILE);
        return -1;
-   }
-
+   } else {
+       proc_link_chg_file->write_proc = proc_link_chg_write;
+   } 
 
    printk(KERN_ALERT"[ANIMA]: kprobe registered\n");
    return 0;
@@ -155,8 +193,9 @@ static int __init anima_init(void) {
 static void __exit anima_exit(void) {
    unregister_kprobe(&kp_on);
    unregister_kprobe(&kp_off);
-   remove_proc_entry(MODE_PROC_FILE, NULL);
-   remove_proc_entry(LINK_CHANGE_PROC_FILE, NULL);
+   remove_proc_entry(MODE_PROC_FILE, proc_module_entry);
+   remove_proc_entry(LINK_CHANGE_PROC_FILE, proc_module_entry);
+   remove_proc_entry(MODULE_NAME, NULL);
    printk(KERN_ALERT"[ANIMA]: leaving the kernel...\n");
 }
 
