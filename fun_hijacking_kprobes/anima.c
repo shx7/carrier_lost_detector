@@ -31,7 +31,13 @@ MODULE_PARM_DESC(hijacking_state, "hijacking state");
 
 struct net_device *p_dev = NULL;
 
-void change_link_state(struct net_device *dev) { 
+void change_link_state_up(struct net_device *dev) { 
+    dev->state = 7;
+    netdev_state_change(dev); 
+}
+
+void change_link_state_down(struct net_device *dev) { 
+    dev->state = 3;
     netdev_state_change(dev); 
 }
 
@@ -40,7 +46,7 @@ int pre_handler(struct kprobe *p, struct pt_regs *regs) {
     p_dev = (struct net_device *)(regs->di);
 
     printk(KERN_ALERT"[ANIMA]: dev->name %s\n", p_dev->name);
-    printk(KERN_ALERT"[ANIMA]: dev->state %s\n", p_dev->name);
+    printk(KERN_ALERT"[ANIMA]: dev->state %lx\n", p_dev->state);
 
     if (strncmp(p_dev->name, DEV_NAME, IFNAMSIZ) == 0) {
         printk(KERN_ALERT"[ANIMA]: eth0 detected\n");
@@ -129,16 +135,19 @@ static int proc_link_chg_write (struct file *file,
     if (copy_from_user(msg, buffer, len))
         return -EFAULT;
 
-    if (strncmp(msg, "1", 1) == 0) {
-        if (p_dev != NULL) {
-            printk(KERN_ALERT"[ANIMA]: link state changed\n");
-            change_link_state(p_dev);
+    if (p_dev != NULL) { 
+        if (strncmp(msg, "0", 1) == 0) {
+            printk(KERN_ALERT"[ANIMA]: link state changed DOWN\n");
+            change_link_state_down(p_dev);
+        } else if (strncmp(msg, "1", 1) == 0) {
+            printk(KERN_ALERT"[ANIMA]: link state changed UP\n");
+            change_link_state_up(p_dev);
         } else {
-            printk(KERN_ALERT"[ANIMA]: dev struct is null, no change\n");
+            printk(KERN_ALERT"[ANIMA]: no link state change\n");
         }
     } else {
-        printk(KERN_ALERT"[ANIMA]: no link state change\n");
-    } 
+        printk(KERN_ALERT"[ANIMA]: dev struct is null, no change\n");
+    }
 
     return len; 
 }
