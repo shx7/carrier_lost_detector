@@ -30,6 +30,8 @@ module_param_named(hijacking_state, hijacking_state, uint, 0644);
 MODULE_PARM_DESC(hijacking_state, "hijacking state");
 
 struct net_device *p_dev = NULL;
+char   device_copied = 0;
+struct net_device dev;
 
 void change_link_state_up(struct net_device *dev) { 
     dev->state = 7;
@@ -50,6 +52,9 @@ int pre_handler(struct kprobe *p, struct pt_regs *regs) {
 
     if (strncmp(p_dev->name, DEV_NAME, IFNAMSIZ) == 0) {
         printk(KERN_ALERT"[ANIMA]: eth0 detected\n");
+        dev = *p_dev; 
+        device_copied = 1;
+
         if (hijacking_state == HIJACKING_PRESENT) {
             // Drop request
             p_dev->reg_state = NETREG_UNINITIALIZED;
@@ -135,13 +140,18 @@ static int proc_link_chg_write (struct file *file,
     if (copy_from_user(msg, buffer, len))
         return -EFAULT;
 
+    if (device_copied == 0) {
+        printk("[ANIMA]: device has not been copied. Can't do this\n");
+        return len;
+    }
+
     if (p_dev != NULL) { 
         if (strncmp(msg, "0", 1) == 0) {
             printk(KERN_ALERT"[ANIMA]: link state changed DOWN\n");
-            change_link_state_down(p_dev);
+            change_link_state_down(&dev);
         } else if (strncmp(msg, "1", 1) == 0) {
             printk(KERN_ALERT"[ANIMA]: link state changed UP\n");
-            change_link_state_up(p_dev);
+            change_link_state_up(&dev);
         } else {
             printk(KERN_ALERT"[ANIMA]: no link state change\n");
         }
