@@ -104,10 +104,10 @@ static int proc_mode_write(struct file *file,
 
     if (strncmp(msg, "1", 1) == 0) {
         printk(KERN_ALERT"[ANIMA]: hijacking mode changed to HIJACKING_PRESENT\n");
-        hijacking_mode = HIJACKING_PRESENT;
+        hijacking_state = HIJACKING_PRESENT;
     } else {
         printk(KERN_ALERT"[ANIMA]: hijacking mode changed to HIJACKING_OFF\n");
-        hijacking_mode = HIJACKING_OFF;
+        hijacking_state = HIJACKING_OFF;
     } 
 
     return len;
